@@ -94,6 +94,9 @@ static bool isRxSuspended = false;
 
 static rcChannel_t rcChannels[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 
+// Last received raw values, before rx calibration and MSP RC override (reported by MSP_RAW_RC)
+static uint16_t rcRawNoOverride[MAX_SUPPORTED_RC_CHANNEL_COUNT];
+
 // MSP aux channel overlay: non-zero values override rcChannels[].data for CH9-CH32
 static uint16_t mspAuxOverlay[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 
@@ -477,6 +480,7 @@ bool calculateRxChannelsAndUpdateFailsafe(timeUs_t currentTimeUs)
 
         // sample the channel
         uint16_t sample = (*rxRuntimeConfig.rcReadRawFn)(&rxRuntimeConfig, rawChannel);
+        rcRawNoOverride[channel] = sample;
 
         // apply the rx calibration to flight channel
         if (channel < NON_AUX_CHANNEL_COUNT && sample != 0) {
@@ -689,6 +693,11 @@ int16_t rxGetChannelValue(unsigned channelNumber)
     } else {
         return rcChannels[channelNumber].data;
     }
+}
+
+uint16_t rxGetRawChannelValueNoOverride(unsigned channelNumber)
+{
+    return rcRawNoOverride[channelNumber];
 }
 
 void rxMspAuxOverlaySet(uint8_t channelIndex, uint16_t value)

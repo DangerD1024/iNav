@@ -244,6 +244,7 @@
 #define MSP_RC_TUNING            111    //out message         rc rate, rc expo, rollpitch rate, yaw rate, dyn throttle PID
 #define MSP_ACTIVEBOXES          113    //out message         Active box flags (full width, more than 32 bits)
 #define MSP_MISC                 114    //DEPRECATED in INAV 9.1 - use MSP2_INAV_MISC instead. Will be removed in INAV 10.0
+#define MSP_RAW_RC               115    //out message         raw rc channels, before rx calibration and MSP RC override
 #define MSP_BOXNAMES             116    //out message         the aux switch names
 #define MSP_PIDNAMES             117    //DEPRECATED in INAV 9.1 - no replacement needed (static data). Will be removed in INAV 10.0
 #define MSP_WP                   118    //out message         get a WP, WP# is in the payload, returns (WP#, lat, lon, alt, flags) WP#0-home, WP#16-poshold
