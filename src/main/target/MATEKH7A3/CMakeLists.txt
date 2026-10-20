@@ -1,0 +1,1 @@
+target_stm32h7a3xi(MATEKH7A3 HSE_MHZ 16)

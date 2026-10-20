@@ -38,9 +38,14 @@ void forcedSystemResetWithoutDisablingCaches(void)
 void enableGPIOPowerUsageAndNoiseReductions(void)
 {
 	__HAL_RCC_SYSCFG_CLK_ENABLE();
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    __HAL_RCC_AHBSRAM1_CLK_ENABLE();
+    __HAL_RCC_AHBSRAM2_CLK_ENABLE();
+#else
     __HAL_RCC_D2SRAM1_CLK_ENABLE();
     __HAL_RCC_D2SRAM2_CLK_ENABLE();
     __HAL_RCC_D2SRAM3_CLK_ENABLE();
+#endif
 }
 
 bool isMPUSoftReset(void)
@@ -55,6 +60,8 @@ uint32_t systemBootloaderAddress(void)
 {
 #if defined(STM32H743xx) || defined(STM32H750xx) || defined(STM32H723xx) || defined(STM32H725xx)
     return 0x1ff09800;
+#elif defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    return 0x1ff0a000;
 #else
 #error Unknown MCU
 #endif

@@ -201,6 +201,8 @@ macro(define_target_stm32h7 subfamily size)
     function(target_stm32h7${subfamily}x${size} name)
         set(func_ARGV ARGV)
         string(TOUPPER ${size} upper_size)
+        # File names (startup, linker script) are lower case, e.g. startup_stm32h7a3xx.s
+        string(TOLOWER ${subfamily} lower_subfamily)
         get_stm32_flash_size(flash_size ${size})
         set(definitions
             STM32H7
@@ -212,9 +214,9 @@ macro(define_target_stm32h7 subfamily size)
         )
         target_stm32h7xx(
             NAME ${name}
-            STARTUP startup_stm32h7${subfamily}xx.s
+            STARTUP startup_stm32h7${lower_subfamily}xx.s
             COMPILE_DEFINITIONS ${definitions}
-            LINKER_SCRIPT stm32_flash_h7${subfamily}x${size}
+            LINKER_SCRIPT stm32_flash_h7${lower_subfamily}x${size}
             ${${func_ARGV}}
             SVD STM32H7${subfamily}
         )

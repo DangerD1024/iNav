@@ -192,6 +192,32 @@ typedef struct pllConfig_s {
     uint32_t vos;
 } pllConfig_t;
 
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+// H7A3: nominal max 280MHz at VOS0.
+// VCO = 2MHz (VCI) * 280 = 560MHz, SYSCLK = VCO / 2 = 280MHz
+// PLL1Q = 560 / 6 = 93.3MHz, used for SPI123 kernel clock (kept close to the 100MHz used on H743,
+// so the fixed SPI prescaler tables in bus_spi_hal_ll.c give similar bus speeds)
+pllConfig_t pll1ConfigH7A3 = {
+    .clockMhz = 280,
+    .m = 4,
+    .n = 280,
+    .p = 2,
+    .q = 6,
+    .r = 5,
+    .vos = PWR_REGULATOR_VOLTAGE_SCALE0
+};
+
+// Unlike H743/H750, HCLK can be fed directly with SYSCLK (max 280MHz), APBx = HCLK / 2 = 140MHz
+#define MCU_HCLK_DIVIDER RCC_HCLK_DIV1
+
+// RM0455 Table 16. FLASH recommended number of wait states and programming delay
+// 280MHz at VOS0 is 6WS
+#define MCU_FLASH_LATENCY FLASH_LATENCY_6
+
+// Source for CRS input. H7A3 only has USB1 OTG HS (with embedded FS PHY)
+#define MCU_RCC_CRS_SYNC_SOURCE RCC_CRS_SYNC_SOURCE_USB1
+
+#else
 /*
    PLL1 configuration for different silicon revisions.
 
@@ -228,6 +254,20 @@ pllConfig_t pll1ConfigRevV = {
     .vos = PWR_REGULATOR_VOLTAGE_SCALE0
 };
 
+#define MCU_HCLK_DIVIDER RCC_HCLK_DIV2
+
+// For HCLK=200MHz with VOS1 range, ST recommended flash latency is 2WS.
+// RM0433 (Rev.5) Table 12. FLASH recommended number of wait states and programming delay
+//
+// For higher HCLK frequency, VOS0 is available on RevV silicons, with FLASH wait states 4WS
+// AN5312 (Rev.1) Section 1.2.1 Voltage scaling Table.1
+#define MCU_FLASH_LATENCY FLASH_LATENCY_2
+
+#define MCU_RCC_CRS_SYNC_SOURCE RCC_CRS_SYNC_SOURCE_USB2
+
+#define USE_H7_HSERDY_SLOW_WORKAROUND
+#endif
+
 // HSE clock configuration, originally taken from
 // STM32Cube_FW_H7_V1.3.0/Projects/STM32H743ZI-Nucleo/Examples/RCC/RCC_ClockConfig/Src/main.c
 
@@ -250,7 +290,9 @@ static void SystemClockHSE_Config(void)
     }
 #endif
 
-#ifdef USE_H7_LEGACY_CPU_REVISION_SPEED
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    pllConfig_t *pll1Config = &pll1ConfigH7A3;
+#elif defined(USE_H7_LEGACY_CPU_REVISION_SPEED)
     pllConfig_t *pll1Config = &pll1ConfigRevY;
 #else
     pllConfig_t *pll1Config = (HAL_GetREVID() == REV_ID_V) ? &pll1ConfigRevV : &pll1ConfigRevY;
@@ -270,7 +312,6 @@ static void SystemClockHSE_Config(void)
 
     /* -2- Enable HSE  Oscillator, select it as PLL source and finally activate the PLL */
 
-#define USE_H7_HSERDY_SLOW_WORKAROUND
 #ifdef USE_H7_HSERDY_SLOW_WORKAROUND
 
     // With reference to 2.3.22 in the ES0250 Errata for the L476.
@@ -342,24 +383,26 @@ static void SystemClockHSE_Config(void)
         RCC_CLOCKTYPE_PCLK1 | \
         RCC_CLOCKTYPE_PCLK2  | \
         RCC_CLOCKTYPE_D3PCLK1);
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK; // = PLL1P = 400
-    RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1; // = PLL1P(400) / 1 = 400
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;   // = SYSCLK(400) / 2 = 200
-    RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;  // = HCLK(200) / 2 = 100
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;  // = HCLK(200) / 2 = 100
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;  // = HCLK(200) / 2 = 100
-    RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;  // = HCLK(200) / 2 = 100
+    // H743: SYSCLK = PLL1P = 400, HCLK = 200, APBx = 100
+    // H7A3: SYSCLK = PLL1P = 280, HCLK = 280, APBx = 140
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.AHBCLKDivider = MCU_HCLK_DIVIDER;
+    RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
+    RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
-    // For HCLK=200MHz with VOS1 range, ST recommended flash latency is 2WS.
-    // RM0433 (Rev.5) Table 12. FLASH recommended number of wait states and programming delay
-    //
-    // For higher HCLK frequency, VOS0 is available on RevV silicons, with FLASH wait states 4WS
-    // AN5312 (Rev.1) Section 1.2.1 Voltage scaling Table.1
-
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, MCU_FLASH_LATENCY) != HAL_OK) {
         /* Initialization Error */
         Error_Handler();
     }
+
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    // HAL_RCC_ClockConfig() only sets read latency, flash programming delay must match AXI clock.
+    // RM0455 Table 16: 280MHz at VOS0 requires WRHIGHFREQ = 3
+    __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_3);
+#endif
 
     /* -4- Optional: Disable CSI Oscillator (if the HSI is no more needed by the application)*/
     RCC_OscInitStruct.OscillatorType  = RCC_OSCILLATORTYPE_CSI;
@@ -420,7 +463,7 @@ void SystemClock_Config(void)
 
     RCC_CRSInitTypeDef crsInit = {
         .Prescaler = RCC_CRS_SYNC_DIV1,
-        .Source = RCC_CRS_SYNC_SOURCE_USB2,
+        .Source = MCU_RCC_CRS_SYNC_SOURCE,
         .Polarity = RCC_CRS_SYNC_POLARITY_RISING,
         .ReloadValue = RCC_CRS_RELOADVALUE_DEFAULT,
         .ErrorLimitValue = RCC_CRS_ERRORLIMIT_DEFAULT,
@@ -522,6 +565,7 @@ void SystemClock_Config(void)
     HAL_RCCEx_PeriphCLKConfig(&RCC_PeriphClkInit);
 #endif
 
+#ifndef DISABLE_MCO_OUTPUTS
     // Configure MCO clocks for clock test/verification
 
     // Possible sources for MCO1:
@@ -543,6 +587,7 @@ void SystemClock_Config(void)
     //   RCC_MCO2SOURCE_LSICLK (lsi_ck)
 
     HAL_RCC_MCOConfig(RCC_MCO2, RCC_MCO2SOURCE_PLLCLK, RCC_MCODIV_15); // PLL1P(400M) / 15 = 26.67M
+#endif
 }
 
 #ifdef USE_CRS_INTERRUPTS
@@ -615,6 +660,16 @@ void SystemInit (void)
     RCC->CR |= RCC_CR_HSEON;
     RCC->CR |= RCC_CR_HSI48ON;
 
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    /* Reset CDCFGR1 register */
+    RCC->CDCFGR1 = 0x00000000;
+
+    /* Reset CDCFGR2 register */
+    RCC->CDCFGR2 = 0x00000000;
+
+    /* Reset SRDCFGR register */
+    RCC->SRDCFGR = 0x00000000;
+#else
     /* Reset D1CFGR register */
     RCC->D1CFGR = 0x00000000;
 
@@ -623,6 +678,7 @@ void SystemInit (void)
 
     /* Reset D3CFGR register */
     RCC->D3CFGR = 0x00000000;
+#endif
 
     /* Reset PLLCKSELR register */
     RCC->PLLCKSELR = 0x00000000;
@@ -652,8 +708,11 @@ void SystemInit (void)
     /* Disable all interrupts */
     RCC->CIER = 0x00000000;
 
+#if !defined(STM32H7A3xx) && !defined(STM32H7A3xxQ)
     /* Change  the switch matrix read issuing capability to 1 for the AXI SRAM target (Target 7) */
+    /* AXI SRAM read corruption workaround for STM32H742/743/750 (DEV_ID 0x450) only, not applicable to H7A3 */
   *((__IO uint32_t*)0x51008108) = 0x00000001;
+#endif
 
 #if defined (DATA_IN_ExtSRAM) || defined (DATA_IN_ExtSDRAM)
     SystemInit_ExtMemCtl();
@@ -661,7 +720,11 @@ void SystemInit (void)
 
     /* Configure the Vector Table location add offset address ------------------*/
 #if defined(VECT_TAB_SRAM)
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    SCB->VTOR = CD_AXISRAM1_BASE | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal AXI SRAM */
+#else
     SCB->VTOR = D1_AXISRAM_BASE  | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal ITCMSRAM */
+#endif
 #elif defined(USE_EXST)
     // Don't touch the vector table, the bootloader will have already set it.
 #else

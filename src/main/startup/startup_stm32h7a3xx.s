@@ -64,7 +64,6 @@ Reset_Handler:
   bl persistentObjectInit
 
 /* Copy the data segment initializers from flash to SRAM */  
-
   movs  r1, #0
   b  LoopCopyDataInit
 
@@ -80,12 +79,10 @@ LoopCopyDataInit:
   adds  r2, r0, r1
   cmp  r2, r3
   bcc  CopyDataInit
-
-/* Zero fill the bss segment. */  
-
   ldr  r2, =_sbss
   b  LoopFillZerobss
 
+/* Zero fill the bss segment. */  
 FillZerobss:
   movs  r3, #0
   str  r3, [r2], #4
@@ -95,43 +92,37 @@ LoopFillZerobss:
   cmp  r2, r3
   bcc  FillZerobss
 
-/* Zero fill the sram2 segment. */
+/* Zero fill FASTRAM */ 
+  ldr  r2, =__fastram_bss_start__
+  b  LoopFillZeroFASTRAM
 
-  ldr  r2, =_ssram2
-  b  LoopFillZerosram2
-
-FillZerosram2:
+FillZeroFASTRAM:
   movs  r3, #0
   str  r3, [r2], #4
-
-LoopFillZerosram2:
-  ldr  r3, = _esram2
+   
+LoopFillZeroFASTRAM:
+  ldr  r3, = __fastram_bss_end__
   cmp  r2, r3
-  bcc  FillZerosram2
+  bcc  FillZeroFASTRAM
 
-/* Zero fill the fastram_bss segment. */
+/* Mark the heap and stack */
+    ldr r2, =_heap_stack_begin
+    b LoopMarkHeapStack
 
-  ldr  r2, =_sfastram_bss
-  b  LoopFillZerofastram_bss
+MarkHeapStack:
+  movs  r3, 0xa5a5a5a5
+  str r3, [r2], #4
 
-FillZerofastram_bss:
-  movs  r3, #0
-  str  r3, [r2], #4
-
-LoopFillZerofastram_bss:
-  ldr  r3, = _efastram_bss
-  cmp  r2, r3
-  bcc  FillZerofastram_bss
+LoopMarkHeapStack:
+  ldr r3, = _heap_stack_end
+  cmp r2, r3
+  bcc MarkHeapStack
 
 /* Call the clock system intitialization function.*/
-
   bl  SystemInit   
-
 /* Call static constructors */
 /*  bl __libc_init_array */
-
 /* Call the application's entry point.*/
-
   bl  main
   bx  lr    
 .size  Reset_Handler, .-Reset_Handler

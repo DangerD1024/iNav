@@ -123,8 +123,10 @@ ADCDevice adcDeviceByInstance(ADC_TypeDef *instance)
     if (instance == ADC2)
         return ADCDEV_2;
 
+#if !(defined(STM32H7A3xx) || defined(STM32H7A3xxQ))
     if (instance == ADC3)
         return ADCDEV_3;
+#endif
 
     return ADCINVALID;
 }

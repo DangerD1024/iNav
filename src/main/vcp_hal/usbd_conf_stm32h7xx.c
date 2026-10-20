@@ -74,7 +74,7 @@ PCD_HandleTypeDef hpcd;
                        PCD BSP Routines
  *******************************************************************************/
 
-#ifdef USE_USB_FS
+#if defined(USE_USB_FS) && !(defined(STM32H7A3xx) || defined(STM32H7A3xxQ))
 void OTG_FS_IRQHandler(void)
 #else
 void OTG_HS_IRQHandler(void)
@@ -92,6 +92,30 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef * hpcd)
 {
     GPIO_InitTypeDef GPIO_InitStruct;
 
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    // H7A3 only has USB1_OTG_HS, used in FS mode with the embedded PHY on PA11/PA12
+    if (hpcd->Instance == USB1_OTG_HS)
+    {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+
+        /* Configure DM DP Pins */
+        GPIO_InitStruct.Pin = (GPIO_PIN_11 | GPIO_PIN_12);
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF10_OTG1_HS;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+        /* Enable USB HS Clocks */
+        __HAL_RCC_USB1_OTG_HS_CLK_ENABLE();
+
+        /* Set USB Interrupt to the lowest priority */
+        HAL_NVIC_SetPriority(OTG_HS_IRQn, 6, 0);
+
+        /* Enable USB Interrupt */
+        HAL_NVIC_EnableIRQ(OTG_HS_IRQn);
+    }
+#else
     if (hpcd->Instance == USB_OTG_FS)
     {
         __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -197,6 +221,7 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef * hpcd)
         /* Enable USBHS Interrupt */
         HAL_NVIC_EnableIRQ(OTG_HS_IRQn);
     }
+#endif
 }
 
 /**
@@ -206,6 +231,14 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef * hpcd)
  */
 void HAL_PCD_MspDeInit(PCD_HandleTypeDef * hpcd)
 {
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    if (hpcd->Instance == USB1_OTG_HS)
+    {
+        /* Disable USB HS Clocks */
+        __HAL_RCC_USB1_OTG_HS_CLK_DISABLE();
+        HAL_NVIC_DisableIRQ(OTG_HS_IRQn);
+    }
+#else
     if (hpcd->Instance == USB2_OTG_FS)
     {
         /* Disable USB FS Clocks */
@@ -217,6 +250,7 @@ void HAL_PCD_MspDeInit(PCD_HandleTypeDef * hpcd)
         __HAL_RCC_USB1_OTG_HS_CLK_DISABLE();
         __HAL_RCC_USB1_OTG_HS_ULPI_CLK_DISABLE();
     }
+#endif
 }
 
 /*******************************************************************************
@@ -372,7 +406,11 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef * pdev)
 {
 #ifdef USE_USB_FS
     /* Set LL Driver parameters */
+#if defined(STM32H7A3xx) || defined(STM32H7A3xxQ)
+    hpcd.Instance = USB1_OTG_HS;
+#else
     hpcd.Instance = USB2_OTG_FS;
+#endif
     hpcd.Init.dev_endpoints = 9;
     hpcd.Init.use_dedicated_ep1 = DISABLE;
     hpcd.Init.ep0_mps = EP_MPS_64;
